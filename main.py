@@ -6,24 +6,23 @@ from random import randint
 import datetime
 from vk_api import VkUpload
 
-#245574df4fc0ca71a3b3d51e9278c0b1323cf3d56b4c92119e1f2dbd22f5c459b9dd663f64064d5109c61
-
 #подключим базу данных
 con = sqlite3.connect('bot_data.db')
 cur = con.cursor()
 
+#id группы и основного альбома
 group_id = 204207195
 album_id = 278944463
 
-#готовимся к работе с api и ботом
+# готовимся к работе с api и ботом
 vk_session = vk_api.VkApi(
     token='8e063c31978e844cabfb1896980f8c4883387efc910df61c229bdb7c7f256ae3d81772cb190702ad9734f',
-                          api_version='5.89')
+    api_version='5.89')
 longpoll = VkLongPoll(vk_session)
 upload = VkUpload(vk_session)
 vk = vk_session.get_api()
 
-#дополнительные клавиаутры с кнопками
+# дополнительные клавиаутры с кнопками
 list_for_buttons = ['Вопросы', 'Отзывы', 'Рейтинг']
 common_key = VkKeyboard(one_time=False)
 for el in list_for_buttons:
@@ -40,13 +39,11 @@ feed_key = VkKeyboard(one_time=False)
 list_for_buttons = ['Оставить', 'Посмотреть', 'В начало']
 for el in list_for_buttons:
     feed_key.add_button(el, VkKeyboardColor.POSITIVE)
-yes_no_key = VkKeyboard(one_time=False)
-yes_no_key.add_button('Да', VkKeyboardColor.POSITIVE)
-yes_no_key.add_button('Нет', VkKeyboardColor.NEGATIVE)
 
 params = []
 #пароль для просмотра отзывов
 pass_for_feedback = 'kLDJ;i01pc'
+
 
 #задаём вопрос пользователю
 def ask_me():
@@ -58,7 +55,7 @@ def ask_me():
     global answered_by
     choosing_question = 0
     for event in longpoll.listen():
-        print(answered_by, numbers, sep=' ')
+        #список отвеченных равен списку всех вопросов
         if answered_by == numbers:
             vk.messages.send(
                 user_id=event.user_id,
@@ -69,6 +66,7 @@ def ask_me():
             )
             break
         if choosing_question == 0 and event.from_user:
+            #автор вопроса не может получить свой же вопрос
             num_quest = randint(1, max(numbers))
             while num_quest in answered_by:
                 num_quest = randint(1, max(numbers))
@@ -85,9 +83,10 @@ def ask_me():
 3) {}
 4) {}
 Нажмите на цифру варинта, который считаете верным'''.format(quest_itself[2],
-                            quest_itself[3], quest_itself[4],
-                               quest_itself[5], quest_itself[6]), keyboard=variant_key.get_keyboard()
-                    )
+                                                            quest_itself[3], quest_itself[4],
+                                                            quest_itself[5], quest_itself[6]),
+                    keyboard=variant_key.get_keyboard()
+                )
                 choosing_question = 1
 
         if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
@@ -107,7 +106,7 @@ def ask_me():
                 )
                 for el in [event.user_id, author_id]:
                     current_rate = cur.execute("SELECT points FROM rating WHERE id = {}".
-                                           format(el)).fetchone()[0]
+                                               format(el)).fetchone()[0]
                     current_rate = int(current_rate) + 5
                     cur.execute("UPDATE rating SET points = {} WHERE id = {}".
                                 format(current_rate, el))
@@ -139,9 +138,10 @@ def ask_me():
             answered_by = ' '.join([str(i) for i in sorted(answered_by)])
             print(answered_by)
             cur.execute("UPDATE rating SET answered = ? WHERE id = ?",
-                    (str(answered_by), event.user_id))
+                        (str(answered_by), event.user_id))
             con.commit()
             break
+
 
 # функция загрузки своего вопроса
 def load_quest():
@@ -155,7 +155,6 @@ def load_quest():
             if enough == 0:
                 params = [max(numbers) + 1, event.user_id]
                 enough = 1
-            print(params, 'here')
             if len(params) == 2:
                 vk.messages.send(
                     user_id=event.user_id,
@@ -189,11 +188,10 @@ def load_quest():
             elif len(params) == 7:
                 params.append(event.text)
                 break
-    print(params)
     cur.execute("INSERT INTO questions VALUES(?, ?, ?, ?, ?, ?, ?, ?)", params)
+    #формируем список вопросов, на которые пользователь уже ответил
     answered_by.append(max(numbers) + 1)
     answered_by = ' '.join([str(i) for i in sorted(answered_by)])
-    print(answered_by)
     cur.execute("UPDATE rating SET answered = ? WHERE id = ?",
                 (str(answered_by), params[1]))
     con.commit()
@@ -202,10 +200,12 @@ def load_quest():
         message='Готово! Теперь Ваш вопрос в базе!'
     )
 
+#вывести рейтинг игроков
 def get_rating(whom):
     global vk
     global cur
     global ids
+    #максимум 10 мест для вывода
     if len(ids) >= 10:
         how_many = 10
     else:
@@ -219,6 +219,7 @@ def get_rating(whom):
                     ' (' + str(person[1][2]) + ')'
         )
 
+#получить отзыв - забить в базу
 def get_feedback():
     global vk
     global cur
@@ -238,6 +239,7 @@ def get_feedback():
             )
             break
 
+#показать отзывы, если введён пароль
 def check_feeds():
     global vk
     global cur
@@ -267,13 +269,12 @@ def check_feeds():
 
 # основной цикл
 for event in longpoll.listen():
-    #постоянно обновляем список id пользователей и номера всех вопросов в базе
+    # постоянно обновляем список id пользователей и номера всех вопросов в базе
     ids = [int(i[0]) for i in list(cur.execute("SELECT id FROM rating").fetchall())]
     numbers = [i[0] for i in list(cur.execute("SELECT number FROM questions").fetchall())]
-
-    # result = vk.session.method('messages', {'user_id': evemt})
-    # print(result)
-    if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text\
+    if numbers == []:
+        numbers = [0]
+    if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text \
             and event.from_user:
         if event.user_id not in ids:
             user = vk.users.get(user_ids=event.user_id)
@@ -283,12 +284,7 @@ for event in longpoll.listen():
         answered_by = [int(i) for i in cur.execute("SELECT answered FROM rating WHERE id = {}".
                                                    format(event.user_id)).fetchone()[0].split()]
 
-        vk.messages.send(
-                user_id=event.user_id,
-                attachments=event.attachments
-        )
-
-        if event.text.lower() == 'начать' or event.text.lower() == 'старт'\
+        if event.text.lower() == 'начать' or event.text.lower() == 'старт' \
                 or event.text.lower() == 'привет' or event.text.lower() == 'здравствуйте':
             vk.messages.send(
                 user_id=event.user_id,
@@ -297,47 +293,47 @@ for event in longpoll.listen():
             )
         if event.text.lower() == 'вопросы':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='Хотите ответить на чей-то? Или загрузить свой?',
-                    keyboard=quest_key.get_keyboard()
+                user_id=event.user_id,
+                message='Хотите ответить на чей-то? Или загрузить свой?',
+                keyboard=quest_key.get_keyboard()
             )
         if event.text.lower() == 'ответить':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='Ищем вопрос...',
-                    keyboard = quest_key.get_keyboard()
+                user_id=event.user_id,
+                message='Ищем вопрос...',
+                keyboard=quest_key.get_keyboard()
             )
             ask_me()
         if event.text.lower() == 'загрузить':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='Отлично! Сначала введите сам вопрос:')
+                user_id=event.user_id,
+                message='Отлично! Сначала введите сам вопрос:')
             load_quest()
         if event.text.lower() == 'в начало':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='Возвращаемся обратно)',
-                    keyboard = common_key.get_keyboard()
+                user_id=event.user_id,
+                message='Возвращаемся обратно)',
+                keyboard=common_key.get_keyboard()
             )
         if event.text.lower() == 'отзывы':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='''
+                user_id=event.user_id,
+                message='''
 Хотите оставить свой? 
 Или посмотреть другие при наличии пароля?)''',
-                    keyboard = feed_key.get_keyboard()
+                keyboard=feed_key.get_keyboard()
             )
         if event.text.lower() == 'оставить':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='''
+                user_id=event.user_id,
+                message='''
 Напишите, пожалуйста, свой отзыв)'''
             )
             get_feedback()
         if event.text.lower() == 'посмотреть':
             vk.messages.send(
-                    user_id=event.user_id,
-                    message='Пароль?)'
+                user_id=event.user_id,
+                message='Пароль?)'
             )
             check_feeds()
         if event.text.lower() == 'рейтинг':
@@ -348,7 +344,7 @@ for event in longpoll.listen():
             )
             get_rating(event.user_id)
         if event.text.lower() not in ['вопросы', 'ответить', 'загрузить',
-                              'рейтинг', 'в начало', 'отзывы', 'привет',
+                                      'рейтинг', 'в начало', 'отзывы', 'привет',
                                       'здравствуйте', 'старт', 'начать',
                                       'оставить', 'посмотреть']:
             vk.messages.send(
